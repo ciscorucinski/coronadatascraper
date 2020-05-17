@@ -49,19 +49,32 @@ const stringDiff = imports(path.join(lib, 'diffing', 'string-diff.js')).default;
 
 // Utilities /////////////////////////////////////////
 
+function printTitleAndErrors(f, errs) {
+  const b = path.basename(f);
+  if (errs.length === 0) {
+    console.log(`${b}: equal`);
+    return;
+  }
+  console.log(`\n${b}\n${'-'.repeat(b.length)}`);
+  errs.forEach(e => {
+    console.log(`* ${e}`);
+  });
+  console.log();
+}
+
 /** Compare two json files. */
 function compareJson(leftFname, rightFname, formatters) {
-  const loadJson = f => {
-    return JSON.parse(fs.readFileSync(f, 'utf8'));
-  };
-  const left = loadJson(leftFname);
-  const right = loadJson(rightFname);
+  const leftcontent = fs.readFileSync(leftFname, 'utf-8');
+  const rightcontent = fs.readFileSync(rightFname, 'utf-8');
+  if (leftcontent === rightcontent) {
+    printTitleAndErrors(leftFname, []);
+    return;
+  }
+
+  const left = JSON.parse(leftcontent);
+  const right = JSON.parse(rightcontent);
   const errs = jsonDiff.jsonDiff(left, right, 10, formatters);
-  if (errs.length === 0) console.log('  equal');
-  else
-    errs.forEach(e => {
-      console.log(`* ${e}`);
-    });
+  printTitleAndErrors(leftFname, errs);
 }
 
 /** Compare two CSV files. */
@@ -84,31 +97,28 @@ function compareCsv(leftFname, rightFname) {
     if (errs.length >= 10) break;
   }
 
-  if (errs.length === 0) console.log('  equal');
-  else
-    errs.forEach(e => {
-      console.log(`* ${e}`);
-    });
+  printTitleAndErrors(leftFname, errs);
 }
 
-/** Find _one_ file in leftPaths and rightPaths that matches the
- * regex. */
+/** Find corresponding files in leftPaths and rightPaths that match
+ * the regex. */
 function findLeftRightFiles(regex, leftPaths, rightPaths) {
-  function findFile(files, regex) {
-    const drs = files.filter(f => {
+  function findFiles(files, regex) {
+    return files.filter(f => {
       return regex.test(f);
     });
-    if (drs.length === 0) {
-      console.log(`Missing ${regex} file.`);
-      return null;
-    }
-    if (drs.length > 1) {
-      console.log(`Multiple/ambiguous ${regex} files.`);
-      return null;
-    }
-    return drs[0];
   }
-  return [findFile(leftPaths, regex), findFile(rightPaths, regex)];
+  const leftFiles = findFiles(leftPaths, regex);
+  const rightFiles = findFiles(rightPaths, regex);
+
+  const filename = s => {
+    const a = s.split(path.sep);
+    return a[a.length - 1];
+  };
+  return leftFiles.map(lf => {
+    const rf = rightFiles.find(rf => filename(rf) === filename(lf));
+    return [lf, rf];
+  });
 }
 
 // Main method /////////////////////////////////////////
@@ -120,11 +130,6 @@ function compareReportFolders(left, right) {
   };
   const leftPaths = fpaths(left);
   const rightPaths = fpaths(right);
-
-  const printTitle = s => {
-    const b = path.basename(s);
-    console.log(`\n${b}\n${'-'.repeat(b.length)}`);
-  };
 
   const jsonReports = [
     {
@@ -152,25 +157,39 @@ function compareReportFolders(left, right) {
       }
     },
     {
-      regex: /features(.*).json/,
+      regex: /features.json/,
       formatters: {}
-    }
+    },
+    {
+      regex: /features-(.*).json/,
+      formatters: {}
+    },
+    { regex: /timeseries-byLocation.json/, formatters: {} },
+    { regex: /timeseries.json/, formatters: {} }
   ];
 
   jsonReports.forEach(hsh => {
-    const [left, right] = findLeftRightFiles(hsh.regex, leftPaths, rightPaths);
-    if (left && right) {
-      printTitle(left);
-      compareJson(left, right, hsh.formatters);
+    const list = findLeftRightFiles(hsh.regex, leftPaths, rightPaths);
+    for (const [left, right] of list) {
+      if (left && right) {
+        compareJson(left, right, hsh.formatters);
+      }
     }
   });
 
-  const csvReports = [/crawler-report.csv/, /data(.*).csv/];
+  const csvReports = [
+    /crawler-report.csv/,
+    /data(.*).csv/,
+    /timeseries.csv/,
+    /timeseries-tidy.csv/,
+    /timeseries-jhu.csv/
+  ];
   csvReports.forEach(regex => {
-    const [left, right] = findLeftRightFiles(regex, leftPaths, rightPaths);
-    if (left && right) {
-      printTitle(left);
-      compareCsv(left, right);
+    const list = findLeftRightFiles(regex, leftPaths, rightPaths);
+    for (const [left, right] of list) {
+      if (left && right) {
+        compareCsv(left, right);
+      }
     }
   });
 }

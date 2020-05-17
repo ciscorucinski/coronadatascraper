@@ -109,7 +109,7 @@ Your scraper should return an object, an array of objects, or `null` in case the
 
 The object may contain the following attributes:
 
-- `country` - [ISO 3166-1 alpha-3 country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3) [required]
+- `country` - [ISO 3166-1 alpha-3 country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3) (not required if defined on scraper object)
 - `state` - The state, province, or region (not required if defined on scraper object)
 - `county` - The county or parish (not required if defined on scraper object)
 - `city` - The city name (not required if defined on scraper object)
@@ -231,7 +231,7 @@ Here's the scraper for Indiana that gets data from a CSV:
   {
     url: 'https://opendata.arcgis.com/datasets/d14de7e28b0448ab82eb36d6f25b1ea1_0.csv',
     country: 'iso1:US',
-    state: 'IN',
+    state: 'iso2:US-IN',
     scraper: async function() {
       let data = await fetch.csv(this.url);
 
@@ -259,7 +259,7 @@ Here's the scraper for Oregon that pulls data from a HTML table:
 
 ```javascript
   {
-    state: 'OR',
+    state: 'iso2:US-OR',
     country: 'iso1:US',
     url: 'https://www.oregon.gov/oha/PH/DISEASESCONDITIONS/DISEASESAZ/Pages/emerging-respiratory-infections.aspx',
     scraper: async function() {
@@ -298,7 +298,7 @@ Scrapers need to be able to operate correctly on old data, so updates to scraper
 
 ```javascript
 {
-  state: 'LA',
+  state: 'iso2:US-LA',
   country: 'iso1:US',
   aggregate: 'county',
   _countyMap: { 'La Salle Parish': 'LaSalle Parish' },

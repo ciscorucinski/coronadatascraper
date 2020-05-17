@@ -5,7 +5,7 @@ import * as geography from '../../../lib/geography/index.js';
 
 const scraper = {
   county: 'St. Louis County',
-  state: 'MO',
+  state: 'iso2:US-MO',
   country: 'iso1:US',
   aggregate: 'county',
   priority: 1,
@@ -20,15 +20,25 @@ const scraper = {
   type: 'table',
   maintainers: [maintainers.slezakbs],
   async scraper() {
-    this.url = await fetch.getArcGISCSVURLFromOrgId(2, 'w657bnjzrjguNyOy', 'StLouisCounty_Bdy_Geo');
-    const rows = await fetch.csv(this.url);
+    this.url = await fetch.getArcGISCSVURLFromOrgId(this, 2, 'w657bnjzrjguNyOy', 'StLouisCounty_Bdy_Geo');
+    const rows = await fetch.csv(this, this.url, 'default');
     const data = rows[0];
+
+    // On 2020-4-28, MO switched from recording dates as UTC
+    // (eg, "2020-04-27T18:13:20.273Z") to epoch (eg,
+    // 1585082918049, an _integer_ = milliseconds from Jan 1,
+    // 1970).  The Date constructor handles both of these.
+    let d = data.edit_date;
+    // Check if using epoch.
+    if (d.match(/^\d+$/)) d = parseInt(d, 10);
+    const editDate = new Date(d);
+
     return {
       county: geography.addCounty(this.county),
       cases: parse.number(data.Cumulative_Cases),
       deaths: parse.number(data.Deaths),
       recovered: parse.number(data.Cases_Recovered),
-      publishedDate: data.edit_date
+      publishedDate: editDate.toISOString()
     };
   }
 };

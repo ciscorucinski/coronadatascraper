@@ -8,7 +8,7 @@ import datetime from '../../../lib/datetime/index.js';
 // const UNASSIGNED = '(unassigned)';
 
 const scraper = {
-  state: 'SC',
+  state: 'iso2:US-SC',
   country: 'iso1:US',
   url:
     'https://services2.arcgis.com/XZg2efAbaieYAXmu/arcgis/rest/services/COVID19_County_View/FeatureServer/0/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&orderByFields=Confirmed%20desc&resultOffset=0&resultRecordCount=1000&cacheHint=true',
@@ -71,7 +71,7 @@ const scraper = {
 
   scraper: {
     '0': async function() {
-      const data = await fetch.json(this.url);
+      const data = await fetch.json(this, this.url, 'default');
       let counties = [];
 
       for (const record of data.features) {
@@ -96,12 +96,11 @@ const scraper = {
       return counties;
     },
     '2020-03-25': async function() {
-      this.url = await fetch.getArcGISCSVURL(
-        2,
-        '3732035614af4246877e20c3a496e397',
-        'Covid19_Cases_Centroid_SharingView'
-      );
-      const data = await fetch.csv(this.url);
+      const serverNumber = 2;
+      const dashboardId = '3732035614af4246877e20c3a496e397';
+      const layerName = 'Covid19_Cases_Centroid_SharingView';
+      this.url = await fetch.getArcGISCSVURL(this, serverNumber, dashboardId, layerName);
+      const data = await fetch.csv(this, this.url, 'default');
       let counties = [];
       for (const county of data) {
         counties.push({
@@ -118,16 +117,31 @@ const scraper = {
       return counties;
     },
     '2020-03-28': async function() {
-      this.url = await fetch.getArcGISCSVURL(
-        2,
-        '3732035614af4246877e20c3a496e397',
-        'COVID19_County_Polygon_SharingView2' // they started updating this view
-      );
-      const data = await fetch.csv(this.url);
+      const serverNumber = 2;
+      const dashboardId = '3732035614af4246877e20c3a496e397';
+      const layerName = 'COVID19_County_Polygon_SharingView2'; // they started updating this view
+      this.url = await fetch.getArcGISCSVURL(this, serverNumber, dashboardId, layerName);
+      let data = await fetch.csv(this, this.url, 'default');
+
+      // BOM hacking ... sigh.
+      data = data.map(d => {
+        if (d['ï»¿Date_'] && !d.Date_) d.Date_ = d['ï»¿Date_'];
+        return d;
+      });
+
       let counties = [];
       for (const county of data) {
-        if (datetime.scrapeDateIsBefore(county.Date_)) {
-          throw new Error(`Data only available until ${county.Date_}`);
+        // On 2020-4-28, SC switched from recording dates as UTC
+        // (eg, "2020-04-27T18:13:20.273Z") to epoch (eg,
+        // 1585082918049, an _integer_ = milliseconds from Jan 1,
+        // 1970).  The Date constructor handles both of these.
+        let d = county.Date_;
+        // Check if using epoch.
+        if (d.match(/^\d+$/)) d = parseInt(d, 10);
+        const countyDate = new Date(d);
+
+        if (datetime.scrapeDateIsBefore(countyDate)) {
+          throw new Error(`Data only available until ${countyDate}`);
         }
 
         counties.push({

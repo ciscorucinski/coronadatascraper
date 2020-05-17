@@ -13,7 +13,7 @@ const { argv } = yargs
   })
   .option('location', {
     alias: 'l',
-    description: 'Scrape only the location provided by src/shared/scraper path name',
+    description: 'Scrape only the location(s) matching src/shared/scraper path name (e.g, "--location US/PA,US/DE")',
     type: 'string'
   })
   .option('skip', {
@@ -25,6 +25,15 @@ const { argv } = yargs
     alias: 'o',
     description: 'The suffix to add to output files, i.e. passing TEST will produce data-TEST.json etc',
     type: 'string'
+  })
+  .option('onlyScrape', {
+    description: 'Only scrape (for debugging, use with --dumpRaw)',
+    type: 'boolean'
+  })
+  .option('dumpRaw', {
+    alias: 'r',
+    description: 'Dump raw scrape response data to dist',
+    type: 'boolean'
   })
   .option('quiet', {
     alias: 'q',

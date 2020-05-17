@@ -8,7 +8,7 @@ import datetime from '../../../lib/datetime/index.js';
 const UNASSIGNED = '(unassigned)';
 
 const scraper = {
-  state: 'MO',
+  state: 'iso2:US-MO',
   country: 'iso1:US',
   type: 'table',
   aggregate: 'county',
@@ -171,7 +171,7 @@ const scraper = {
   scraper: {
     '0': async function() {
       let counties = {};
-      const $ = await fetch.page(this.url);
+      const $ = await fetch.page(this, this.url, 'default');
       const $table = $('table').first();
 
       const $trs = $table.find('tr');
@@ -207,7 +207,7 @@ const scraper = {
     },
     '2020-02-22': async function() {
       let counties = {};
-      const $ = await fetch.page(this.url);
+      const $ = await fetch.page(this, this.url, 'default');
       const $table = $('table').first();
 
       const $trs = $table.find('tr');
@@ -263,8 +263,8 @@ const scraper = {
 
     '2020-03-30': async function() {
       const counties = {};
-      this.url = await fetch.getArcGISCSVURL(6, '6f2a47a25872470a815bcd95f52c2872', 'lpha_boundry');
-      const data = await fetch.csv(this.url);
+      this.url = await fetch.getArcGISCSVURL(this, 6, '6f2a47a25872470a815bcd95f52c2872', 'lpha_boundry');
+      const data = await fetch.csv(this, this.url, 'default');
 
       const unassigned = {
         county: UNASSIGNED,
@@ -285,10 +285,18 @@ const scraper = {
             counties[countyName].cases += parse.number(countyData.Cases || 0);
             counties[countyName].deaths += parse.number(countyData.Deaths || 0);
           } else {
+            // On 2020-4-28, MO switched from recording dates as UTC
+            // (eg, "2020-04-27T18:13:20.273Z") to epoch (eg,
+            // 1585082918049, an _integer_ = milliseconds from Jan 1,
+            // 1970).  The Date constructor handles both of these.
+            let d = countyData.EditDate;
+            // Check if using epoch.
+            if (d.match(/^\d+$/)) d = parseInt(d, 10);
+            const editDate = new Date(d);
             counties[countyName] = {
               cases: parse.number(countyData.Cases || 0),
               deaths: parse.number(countyData.Deaths || 0),
-              publishedDate: countyData.EditDate
+              publishedDate: editDate.toISOString()
             };
           }
         }

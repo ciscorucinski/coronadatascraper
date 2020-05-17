@@ -1,3 +1,4 @@
+import assert from 'assert';
 import * as fetch from '../../../lib/fetch/index.js';
 import * as parse from '../../../lib/parse.js';
 import * as geography from '../../../lib/geography/index.js';
@@ -7,7 +8,7 @@ import * as transform from '../../../lib/transform.js';
 const UNASSIGNED = '(unassigned)';
 
 const scraper = {
-  state: 'GA',
+  state: 'iso2:US-GA',
   country: 'iso1:US',
   url: 'https://dph.georgia.gov/covid-19-daily-status-report',
   type: 'table',
@@ -186,7 +187,7 @@ const scraper = {
   },
   scraper: {
     '0': async function() {
-      const $ = await fetch.page(this.url);
+      const $ = await fetch.page(this, this.url, 'default');
       let counties = [];
       const $trs = $('table:contains(County):contains(Cases) tbody > tr');
       $trs.each((index, tr) => {
@@ -210,14 +211,16 @@ const scraper = {
       return counties;
     },
     '2020-03-27': async function() {
-      const pageHTML = (await fetch.page(this.url)).html();
+      const tmp = await fetch.page(this, this.url, 'tmpindex');
+      const pageHTML = tmp.html();
       [this.url] = pageHTML.match(/https:\/\/(.*)\.cloudfront\.net/);
 
-      const $ = await fetch.page(this.url);
+      const $ = await fetch.page(this, this.url, 'default');
       let counties = [];
-      const $trs = $('.tcell:contains("COVID-19 Confirmed Cases By County")')
+      const $trs = $('*[class^="tcell"]:contains("COVID-19 Confirmed Cases By County")')
         .closest('tbody')
         .find('tr:not(:first-child,:last-child)');
+      assert($trs.length > 0, 'no rows found');
 
       $trs.each((index, tr) => {
         const $tr = $(tr);
@@ -227,7 +230,7 @@ const scraper = {
 
         const cases = parse.number($tr.find('td:nth-child(2)').text());
 
-        if (county === 'Unknown County') {
+        if (['Unknown County', 'Non-Georgia Resident County'].includes(county)) {
           county = UNASSIGNED;
         }
 
@@ -239,6 +242,71 @@ const scraper = {
       counties = geography.addEmptyRegions(counties, this._counties, 'county');
 
       return counties;
+    },
+    '2020-04-28': async function() {
+      // Find entries, throws if doesn't find at least one.
+      const findMany = (el, selector) => {
+        const ret = el.find(selector);
+        if (ret.length === 0) throw new Error(`No match for ${selector}`);
+        return ret;
+      };
+
+      this.url = 'https://ga-covid19.ondemand.sas.com/';
+      // The site uses React/Material UI, so have to use a headless
+      // browser to get everything.
+      const $ = await fetch.headless(this, this.url, 'default');
+
+      // Find the table with the headings we want.
+      const desiredHeadings = 'County, Confirmed Cases, Cases per 100K, Total Deaths, Hospitalizations';
+      const allTables = findMany($.root(), '.MuiTable-root.MuiTable-stickyHeader');
+      let countiesTable = null;
+      allTables.each(function() {
+        const t = $(this);
+        const headings = findMany(t, 'thead > tr > th')
+          .toArray()
+          .map(th => {
+            return $(th).text();
+          });
+        if (headings.join(', ') === desiredHeadings) {
+          countiesTable = t;
+        }
+      });
+
+      if (!countiesTable) throw new Error(`Couldn't find table with desired headings ${desiredHeadings})`);
+
+      let results = [];
+
+      // Hold on to reference to use it in an internal function.
+      const myCountyMap = this._countyMap;
+      findMany(countiesTable, 'tbody > tr').each(function() {
+        const tr = $(this);
+        const cells = findMany(tr, 'td')
+          .toArray()
+          .map(th => {
+            return $(th).text();
+          });
+        if (cells.length !== 5) {
+          throw new Error(`Expected 5 cells, got ${cells.length}`);
+        }
+
+        let name = cells[0];
+        name = myCountyMap[name] || name;
+        let county = geography.addCounty(parse.string(name));
+        if (['Unknown County', 'Non-Georgia Resident County'].includes(county)) {
+          county = UNASSIGNED;
+        }
+
+        const cases = parse.number(cells[1]);
+        const deaths = parse.number(cells[3]);
+        const hospitalized = parse.number(cells[4]);
+
+        results.push({ county, cases, deaths, hospitalized });
+      });
+
+      results.push(transform.sumData(results));
+      results = geography.addEmptyRegions(results, this._counties, 'county');
+
+      return results;
     }
   }
 };

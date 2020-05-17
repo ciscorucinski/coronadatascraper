@@ -33,8 +33,10 @@ const scraper = {
     'https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers',
   async scraper() {
     const states = [];
-    const $ = await fetch.page(this.url);
+    const $ = await fetch.page(this, this.url, 'default');
     const $table = $('.health-table__responsive > table');
+    assert.equal($table.length, 1, 'table not found');
+
     const $trs = $table.find('tbody > tr:not(:first-child):not(:last-child)');
     $trs.each((index, tr) => {
       const $tr = $(tr);
